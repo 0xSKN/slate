@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Slate – Manim-style animations for your phone</title>
+<style>
+:root{--bg:#f3f5f7;--panel:#fff;--ink:#1b2530;--mute:#5d6b7a;--line:#d5dbe1;--acc:#1f7fa3;--accink:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10161c;--panel:#18212a;--ink:#e6edf3;--mute:#93a1af;--line:#2a3743;--acc:#58c4dd;--accink:#08202a}}
+:root[data-theme="dark"]{--bg:#10161c;--panel:#18212a;--ink:#e6edf3;--mute:#93a1af;--line:#2a3743;--acc:#58c4dd;--accink:#08202a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:14px}
+h1{font:600 1.35rem/1.2 Georgia,"Times New Roman",serif;margin:4px 0 2px}
+p.sub{margin:0 0 12px;color:var(--mute);font-size:.9rem}
+canvas{width:100%;aspect-ratio:16/9;display:block;background:#000;border-radius:10px;border:1px solid var(--line)}
+.bar{display:flex;gap:8px;align-items:center;margin:10px 0}
+.bar input[type=range]{flex:1;min-width:0;accent-color:var(--acc)}
+button,select{font:inherit;min-height:44px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}
+button:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#tm{font-variant-numeric:tabular-nums;color:var(--mute);font-size:.85rem;min-width:70px;text-align:right}
+#ask{height:84px;font:16px/1.4 system-ui,sans-serif;white-space:normal;margin-top:4px}
+textarea{width:100%;height:300px;font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;tab-size:2;resize:vertical;overflow-x:auto;white-space:pre}
+#err{color:#d6453d;font-size:.85rem;min-height:1.3em;margin:6px 0}
+video{width:100%;border-radius:10px;margin-top:8px}
+details{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+summary{min-height:32px;cursor:pointer}
+code{font:12.5px ui-monospace,Menlo,monospace}
+.ref{overflow-x:auto;color:var(--mute);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Slate</h1>
+<p class="sub">Describe a scene in plain English, watch it animate, record it as a video.</p>
+<label for="key" style="font-weight:600">Anthropic API key</label>
+<input id="key" type="password" placeholder="sk-ant-..." autocomplete="off" style="width:100%;min-height:44px;margin:4px 0 10px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit">
+<label for="ask" style="font-weight:600">What should the animation show?</label>
+<textarea id="ask" placeholder="A red circle slowly turns into a blue square, then slides off to the right with the title 'Shapes'"></textarea>
+<input id="img" type="file" accept="image/*" hidden>
+<div class="bar"><button id="pick">Image to text</button><button id="gen" class="p" style="flex:1">Make animation</button></div>
+<canvas id="cv" width="1280" height="720"></canvas>
+<div class="bar">
+  <button id="pl" class="p" style="min-width:76px">Play</button>
+  <input id="sc" type="range" min="0" max="1000" value="0" aria-label="Timeline">
+  <span id="tm">0.0 / 0.0</span>
+</div>
+<div class="bar">
+  <select id="ex" aria-label="Example"></select>
+  <button id="run" class="p">Run code</button>
+  <button id="rec">Record</button>
+</div>
+<div id="err" role="status"></div>
+<textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Scene code"></textarea>
+<video id="vid" controls playsinline hidden></video>
+<details><summary>Reference</summary><div class="ref">
+<p><b>Shapes:</b> <code>Circle(r)</code> <code>Square(side)</code> <code>Rect(w,h)</code> <code>Line(x1,y1,x2,y2)</code> <code>Arrow(x1,y1,x2,y2)</code> <code>Dot()</code> <code>Text("hi",{size})</code> <code>Graph(fn,x0,x1)</code></p>
+<p><b>Options &amp; chains:</b> <code>{x,y,color}</code> <code>.pos(x,y)</code> <code>.color(c)</code> <code>.fill(c,opacity)</code></p>
+<p><b>Animations:</b> <code>Create</code> <code>Write</code> <code>FadeIn</code> <code>FadeOut</code> <code>MoveTo(m,x,y)</code> <code>Rotate(m,angle)</code> <code>Scale(m,k)</code> <code>Transform(a,b)</code></p>
+<p><b>Timing:</b> <code>yield s.play(anim, anim, seconds)</code> and <code>yield s.wait(seconds)</code>. <code>s.add(m)</code> shows a shape immediately. The screen is 14.2 × 8 units, origin at the centre.</p>
+<p><b>More shapes:</b> <code>Polygon(pts)</code> <code>Triangle(size)</code> <code>Ellipse(rx,ry)</code> <code>Arc(r,a0,a1)</code> <code>Parametric(fn,t0,t1)</code> <code>NumberLine(a,b)</code> <code>Grid(w,h)</code></p>
+<p><b>More animations:</b> <code>Grow</code> <code>Indicate</code> <code>ChangeColor(m,c)</code> <code>Shift(m,dx,dy)</code> <code>MoveAlong(m,path)</code></p>
+<p><b>Colors:</b> BLUE YELLOW RED GREEN WHITE ORANGE. Constant: PI.</p>
+<p>Record plays the scene once and saves a WebM. Press and hold the video to download it.</p>
+</div></details>
+</main>
+<script>
+const W=1280,H=720,U=90,PI=Math.PI;
+const C={BLUE:'#58C4DD',YELLOW:'#F6D04D',RED:'#FC6255',GREEN:'#83C167',WHITE:'#ffffff',ORANGE:'#F2994A'};
+const ease=p=>p*p*(3-2*p), lerp=(a,b,t)=>a+(b-a)*t;
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const mix=(a,b,t)=>{const x=hex(a),y=hex(b);return '#'+x.map((v,i)=>Math.round(lerp(v,y[i],t)).toString(16).padStart(2,'0')).join('')};
+class M{constructor(p,o={},closed=false){Object.assign(this,{p,x:0,y:0,rot:0,sc:1,op:1,stroke:C.WHITE,fillc:null,fo:.3,prog:1,vis:0,closed,custom:null},o);if(o.color)this.stroke=o.color}
+ pos(x,y){this.x=x;this.y=y;return this} color(c){this.stroke=c;return this} fill(c,o=.3){this.fillc=c;this.fo=o;return this}}
+const circ=(r,n=64)=>Array.from({length:n+1},(_,i)=>[r*Math.cos(2*PI*i/n),r*Math.sin(2*PI*i/n)]);
+const L={...C,PI,
+ Circle:(r=1,o)=>new M(circ(r),{color:C.BLUE,...o},true),
+ Dot:(o)=>new M(circ(.1,16),{color:C.WHITE,fillc:C.WHITE,fo:1,...o},true),
+ Rect:(w=2,h=1,o)=>new M([[-w/2,-h/2],[w/2,-h/2],[w/2,h/2],[-w/2,h/2],[-w/2,-h/2]],{color:C.BLUE,...o},true),
+ Square:(s=2,o)=>L.Rect(s,s,o),
+ Line:(a,b,c,d,o)=>new M([[a,b],[c,d]],o),
+ Arrow:(a,b,c,d,o)=>{const t=Math.atan2(d-b,c-a),k=.25,f=s=>[c-k*Math.cos(t+s),d-k*Math.sin(t+s)];return new M([[a,b],[c,d],f(.5),[c,d],f(-.5)],{color:C.YELLOW,...o})},
+ Graph:(fn,x0=-3,x1=3,o)=>new M(Array.from({length:161},(_,i)=>{const x=x0+(x1-x0)*i/160;return [x,fn(x)]}),{color:C.GREEN,...o}),
+ Text:(t,o)=>Object.assign(new M([],{size:1,...o}),{text:t}),
+ Create:m=>({begin(){m.vis=1;m.prog=0},at(p){m.prog=p}}),
+ FadeIn:m=>({begin(){m.vis=1;this.o=m.op},at(p){m.op=this.o*p}}),
+ FadeOut:m=>({begin(){this.o=m.op},at(p){m.op=this.o*(1-p);m.vis=p<1?1:0}}),
+ MoveTo:(m,x,y)=>({begin(){this.a=[m.x,m.y]},at(p){m.x=lerp(this.a[0],x,p);m.y=lerp(this.a[1],y,p)}}),
+ Rotate:(m,g)=>({begin(){this.r=m.rot},at(p){m.rot=this.r+g*p}}),
+ Scale:(m,k)=>({begin(){this.s=m.sc},at(p){m.sc=this.s*lerp(1,k,p)}}),
+ Transform:(a,b)=>({begin(){this.pa=rs(world(a));this.pb=rs(world(b));this.c=[a.stroke,b.stroke]},
+  at(p){if(p>=1){Object.assign(a,{p:b.p,x:b.x,y:b.y,rot:b.rot,sc:b.sc,closed:b.closed,stroke:b.stroke,fillc:b.fillc,fo:b.fo,custom:null});return}
+   a.custom=this.pa.map((q,i)=>[lerp(q[0],this.pb[i][0],p),lerp(q[1],this.pb[i][1],p)]);a.stroke=mix(this.c[0],this.c[1],p);a.closed=b.closed}})
+};
+L.Write=L.Create;
+L.Polygon=(pts,o)=>new M([...pts,pts[0]],{color:C.BLUE,...o},true);
+L.Triangle=(z=2,o)=>L.Polygon([[0,z*.58],[-z/2,-z*.29],[z/2,-z*.29]],o);
+L.Ellipse=(a=2,b=1,o)=>new M(circ(1).map(([x,y])=>[x*a,y*b]),{color:C.BLUE,...o},true);
+L.Arc=(r=1,a0=0,a1=PI,o)=>new M(Array.from({length:61},(_,i)=>{const t=a0+(a1-a0)*i/60;return[r*Math.cos(t),r*Math.sin(t)]}),{color:C.ORANGE,...o});
+L.Parametric=(f,t0=0,t1=1,o)=>new M(Array.from({length:201},(_,i)=>f(t0+(t1-t0)*i/200)),{color:C.GREEN,...o});
+L.NumberLine=(a=-5,b=5,o)=>{const p=[[a,0]];for(let i=a;i<b;i++)p.push([i,.15],[i,0],[i+1,0]);p.push([b,.15],[b,0]);return new M(p,{color:C.WHITE,...o})};
+L.Grid=(w=14,h=8,o)=>{const p=[];for(let y=-h/2,i=0;y<=h/2+1e-9;y++,i++){const a=i%2?w/2:-w/2;p.push([a,y],[-a,y])}
+ const xs=[];for(let k=-w/2;k<=w/2+1e-9;k++)xs.push(k);if(p[p.length-1][0]>0)xs.reverse();
+ xs.forEach((x,i)=>{const a=i%2?-h/2:h/2;p.push([x,a],[x,-a])});return new M(p,{color:C.BLUE,op:.35,...o})};
+L.Grow=m=>({m,begin(){m.vis=1;this.s=m.sc},at(p){m.sc=this.s*p}});
+L.Indicate=m=>({begin(){this.s=m.sc},at(p){m.sc=this.s*(1+.3*Math.sin(PI*p))}});
+L.ChangeColor=(m,c)=>({begin(){this.c=m.stroke},at(p){m.stroke=mix(this.c,c,p)}});
+L.Shift=(m,dx,dy)=>({begin(){this.a=[m.x,m.y]},at(p){m.x=this.a[0]+dx*p;m.y=this.a[1]+dy*p}});
+L.MoveAlong=(m,path)=>({begin(){this.q=rs(world(path),200)},at(p){const q=this.q[Math.min(199,Math.round(p*199))];m.x=q[0];m.y=q[1]}});
+function world(m){if(m.custom)return m.custom;const c=Math.cos(m.rot),s=Math.sin(m.rot);return m.p.map(([x,y])=>[m.x+(x*c-y*s)*m.sc,m.y+(x*s+y*c)*m.sc])}
+function rs(pts,n=120){const d=[0];for(let i=1;i<pts.length;i++)d.push(d[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+ const T=d[d.length-1]||1,out=[];let j=1;for(let k=0;k<n;k++){const t=T*k/(n-1);while(j<pts.length-1&&d[j]<t)j++;const u=(t-d[j-1])/((d[j]-d[j-1])||1);out.push([lerp(pts[j-1][0],pts[j][0],u),lerp(pts[j-1][1],pts[j][1],u)])}return out}
+function runTo(fn,T){const objs=[];const reg=m=>{if(!objs.includes(m))objs.push(m)};
+ const s={add(...a){a.forEach(m=>{m.vis=1;reg(m)})},remove(...a){a.forEach(m=>m.vis=0)},
+  play(...a){let d=1;if(typeof a[a.length-1]==='number')d=a.pop();return{a,d}},wait(d=1){return{a:[],d}}};
+ const g=fn(s);let t=0;
+ for(;;){const r=g.next();if(r.done)break;const{a,d}=r.value;a.forEach(x=>{x.begin();});
+  a.forEach(x=>{x.m&&reg(x.m)});
+  if(T<t+d){const p=ease(Math.max(0,(T-t)/d));a.forEach(x=>x.at(p));return{objs,dur:null}}
+  a.forEach(x=>x.at(1));t+=d}
+ return{objs,dur:t}}
+// Animations register their target through a wrapper so Create/FadeIn can add objects automatically
+['Create','FadeIn','Write'].forEach(k=>{const f=L[k];L[k]=m=>{const a=f(m);a.m=m;return a}});
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function draw(objs){ctx.globalAlpha=1;ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);ctx.lineCap=ctx.lineJoin='round';
+ for(const m of objs){if(!m.vis)continue;ctx.globalAlpha=Math.max(0,Math.min(1,m.op));
+  if(m.text!==undefined){ctx.font=`italic ${60*m.size*m.sc}px Georgia,serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=m.stroke;
+   ctx.fillText(m.text.slice(0,Math.ceil(m.text.length*m.prog)),W/2+m.x*U,H/2-m.y*U);continue}
+  const pts=world(m),n=Math.max(2,Math.ceil(pts.length*m.prog));if(m.prog<=0)continue;
+  ctx.beginPath();for(let i=0;i<n;i++){const q=pts[i];i?ctx.lineTo(W/2+q[0]*U,H/2-q[1]*U):ctx.moveTo(W/2+q[0]*U,H/2-q[1]*U)}
+  if(m.closed&&m.fillc&&m.prog>=1){ctx.globalAlpha*=m.fo;ctx.fillStyle=m.fillc;ctx.fill();ctx.globalAlpha=Math.max(0,Math.min(1,m.op))}
+  ctx.strokeStyle=m.stroke;ctx.lineWidth=4;ctx.stroke()}
+ ctx.globalAlpha=1}
+const EX={
+'Shapes morph':`function*(s){
+  const title=Text("Square to circle",{y:3}).color(WHITE);
+  const sq=Square(2.4,{color:BLUE}).fill(BLUE,.3);
+  const ci=Circle(1.4,{color:YELLOW}).fill(YELLOW,.3);
+  yield s.play(Write(title),1);
+  yield s.play(Create(sq),1.5);
+  yield s.play(Rotate(sq,PI/2),1);
+  yield s.play(Transform(sq,ci),1.5);
+  yield s.play(MoveTo(sq,-3,0),1);
+  yield s.play(MoveTo(sq,3,0),1.5);
+  yield s.play(FadeOut(sq),FadeOut(title),1);
+}`,
+'Sine graph':`function*(s){
+  const x=Line(-6,0,6,0,{color:WHITE}), y=Line(0,-3,0,3,{color:WHITE});
+  const g=Graph(t=>2*Math.sin(t),-6,6,{color:GREEN});
+  const lbl=Text("y = 2 sin x",{x:3.2,y:2.8,size:.7}).color(YELLOW);
+  yield s.play(Create(x),Create(y),1);
+  yield s.play(Create(g),3);
+  yield s.play(Write(lbl),1);
+  yield s.wait(1);
+  const d=Dot({color:RED}).fill(RED,1).pos(-6,2*Math.sin(-6));
+  yield s.play(FadeIn(d),.5);
+  yield s.play(MoveTo(d,PI/2,2),1.5);
+}`,
+'Vectors':`function*(s){
+  const a=Arrow(0,0,3,2,{color:BLUE}), b=Arrow(0,0,-2,2.5,{color:RED});
+  const c=Arrow(0,0,1,4.5,{color:YELLOW});
+  yield s.play(Create(a),1);
+  yield s.play(Create(b),1);
+  yield s.play(Create(c),1.5);
+  yield s.play(Rotate(c,PI/6),Scale(c,.7),1.5);
+  yield s.wait(1);
+}`};
+EX['Point on a curve']=`function*(s){
+  const g=Grid(14,8);
+  const nl=NumberLine(-5,5,{y:-2.5});
+  const par=Graph(t=>.25*t*t-2,-5,5,{color:YELLOW});
+  const d=Dot({color:RED}).fill(RED,1).pos(-5,4.25);
+  const t=Text("A point rolls along a parabola",{y:3.3,size:.6});
+  s.add(g);
+  yield s.play(Write(t),1);
+  yield s.play(Create(nl),Create(par),2);
+  yield s.play(FadeIn(d),.5);
+  yield s.play(MoveAlong(d,par),4);
+  yield s.play(Indicate(d),ChangeColor(par,GREEN),1.5);
+}`;
+const code=document.getElementById('code'),ex=document.getElementById('ex'),err=document.getElementById('err'),sc=document.getElementById('sc'),tm=document.getElementById('tm'),pl=document.getElementById('pl'),vid=document.getElementById('vid'),rec=document.getElementById('rec');
+Object.keys(EX).forEach(k=>ex.add(new Option(k,k)));
+let fn=null,dur=0,t=0,playing=false,last=0,mr=null;
+function build(){err.textContent='';try{fn=new Function(...Object.keys(L),'return ('+code.value+')')(...Object.values(L));dur=runTo(fn,1e9).dur;t=0;show()}catch(e){err.textContent=e.message;fn=null}}
+function show(){if(!fn)return;try{draw(runTo(fn,Math.min(t,dur-1e-4)).objs)}catch(e){err.textContent=e.message;playing=false}
+ sc.value=dur?t/dur*1000:0;tm.textContent=t.toFixed(1)+' / '+dur.toFixed(1);pl.textContent=playing?'Pause':'Play'}
+function tick(n){if(playing){t+=(n-last)/1000;if(t>=dur){t=dur;playing=false;if(mr){mr.stop();mr=null}}show()}last=n;requestAnimationFrame(tick)}
+pl.onclick=()=>{if(!fn)return;if(t>=dur)t=0;playing=!playing;show()};
+sc.oninput=()=>{playing=false;t=sc.value/1000*dur;show()};
+ex.onchange=()=>{code.value=EX[ex.value];build()};
+document.getElementById('run').onclick=()=>{playing=false;build();playing=!!fn;show()};
+rec.onclick=()=>{if(!fn)return;if(!window.MediaRecorder||!cv.captureStream){err.textContent='This browser cannot record video. Try Chrome.';return}
+ const ch=[];mr=new MediaRecorder(cv.captureStream(30),{mimeType:MediaRecorder.isTypeSupported('video/webm')?'video/webm':''});
+ mr.ondataavailable=e=>e.data.size&&ch.push(e.data);
+ mr.onstop=()=>{vid.src=URL.createObjectURL(new Blob(ch,{type:'video/webm'}));vid.hidden=false;vid.scrollIntoView({block:'center'})};
+ t=0;mr.start();playing=true;show()};
+const ask=document.getElementById('ask'),gen=document.getElementById('gen');
+const SPEC=`You write scene code for a tiny canvas animation library. Reply with ONLY one JavaScript generator function expression, starting with function*(s){ and ending with }. No markdown fences, no explanation, no comments.
+Screen: x from -7 to 7, y from -4 to 4, origin at centre, y up. Black background.
+Colors (constants): BLUE YELLOW RED GREEN WHITE ORANGE. Constant PI.
+Shapes: Circle(radius,opts) Square(side,opts) Rect(w,h,opts) Line(x1,y1,x2,y2,opts) Arrow(x1,y1,x2,y2,opts) Dot(opts) Text(string,opts) Graph(fn,x0,x1,opts). opts is {x,y,color,size}. size only applies to Text (1 is normal, 0.6 small, 1.5 big). Chain methods: .pos(x,y) .color(c) .fill(c,opacity).
+Animations: Create(m) Write(m) FadeIn(m) FadeOut(m) MoveTo(m,x,y) Rotate(m,radians) Scale(m,factor) Transform(a,b). Create and Write draw a shape or reveal text. Transform morphs a into b, and afterwards a looks like b (b is never shown itself).
+More shapes: Polygon([[x,y],...],opts) Triangle(size,opts) Ellipse(rx,ry,opts) Arc(radius,startAngle,endAngle,opts) Parametric(t=>[x,y],t0,t1,opts) NumberLine(a,b,opts) with whole numbers a and b, Grid(width,height,opts) which is a faint background grid, so add it with s.add(grid) first.
+More animations: Grow(m) ChangeColor(m,color) Indicate(m) Shift(m,dx,dy) MoveAlong(m,pathShape) where pathShape is a Graph, Arc or Parametric already shown on screen.
+Style guide: always start with a short title Text at y=3.3 using size .6 to .8. For maths, draw axes with Line, plot with Graph, and label with Text, revealing one step at a time. For physics, use a Dot moving along a path with Arrow shapes for forces or velocity. Keep labels away from shapes, never leave things overlapping, and finish by holding the final frame for 1 second.
+Timing: yield s.play(anim1, anim2, seconds) runs animations together; yield s.wait(seconds) pauses. s.add(m) shows a shape instantly. Every shape must be introduced with Create, Write, FadeIn or s.add before it is moved or transformed. Keep the whole scene between 5 and 15 seconds. Text only supports plain letters, numbers and basic punctuation, with no math symbols or line breaks.
+Example:
+function*(s){const t=Text("Hello",{y:3}).color(YELLOW);const c=Circle(1.2,{color:BLUE}).fill(BLUE,.3);yield s.play(Write(t),1);yield s.play(Create(c),1.5);yield s.play(MoveTo(c,3,0),1);yield s.play(Transform(c,Square(2,{color:RED}).pos(3,0)),1.5);}`;
+const clean=t=>t.replace(/```[a-z]*\n?/gi,'').trim();
+const MODEL='claude-sonnet-5-5',KEY_ID='slate_key';
+const key=document.getElementById('key');
+try{key.value=localStorage.getItem(KEY_ID)||''}catch(e){}
+key.onchange=()=>{try{localStorage.setItem(KEY_ID,key.value.trim())}catch(e){}};
+async function ask1(content){
+ if(!key.value.trim())throw new Error('Paste your Anthropic API key first.');
+ const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':key.value.trim(),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:MODEL,max_tokens:2000,messages:[{role:'user',content}]})});
+ const j=await r.json();if(!r.ok)throw new Error((j.error&&j.error.message)||'Request failed ('+r.status+')');
+ return j.content.filter(c=>c.type==='text').map(c=>c.text).join('');}
+const img=document.getElementById('img'),pick=document.getElementById('pick');
+pick.onclick=()=>img.click();
+img.onchange=async()=>{const f=img.files[0];img.value='';if(!f)return;
+ pick.disabled=true;pick.textContent='Reading\u2026';err.textContent='';
+ try{const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=()=>rej(new Error('Could not read file'));r.readAsDataURL(f)});
+  ask.value=(await ask1([{type:'image',source:{type:'base64',media_type:f.type||'image/jpeg',data}},{type:'text',text:'Read this image. If it contains text, transcribe it exactly. Otherwise describe what it shows in two or three plain sentences. Reply with only that text.'}])).trim()}
+ catch(e){err.textContent=e.message}
+ finally{pick.disabled=false;pick.textContent='Image to text'}};
+gen.onclick=async()=>{const q=ask.value.trim();if(!q){err.textContent='Describe the animation first.';return}
+ gen.disabled=true;gen.textContent='Writing scene\u2026';err.textContent='';playing=false;
+ try{code.value=clean(await ask1(SPEC+'\n\nAnimation to build:\n'+q));build();playing=!!fn;show()}
+ catch(e){err.textContent=e.message}
+ finally{gen.disabled=false;gen.textContent='Make animation'}};
+code.value=EX['Shapes morph'];build();requestAnimationFrame(tick);
+</script>
+</body>
+</html>
